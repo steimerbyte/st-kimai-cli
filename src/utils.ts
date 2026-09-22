@@ -653,7 +653,12 @@ export function parseDateRange(rangeStr: string): string[] {
 				current <= endDate && iterations < maxIterations;
 				current.setDate(current.getDate() + 1)
 			) {
-				dates.push(current.toISOString().split("T")[0]);
+				const y = current.getFullYear();
+				const m = current.getMonth() + 1;
+				const day = current.getDate();
+				dates.push(
+					`${y}-${String(m).padStart(2, "0")}-${String(day).padStart(2, "0")}`,
+				);
 				iterations++;
 			}
 		}

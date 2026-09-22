@@ -71,7 +71,9 @@ describe("parseDateRange", () => {
 	it("should parse DD.MM-DD.MM format", () => {
 		const dates = parseDateRange("19.05-21.05");
 		expect(dates).toHaveLength(3);
-		expect(dates[0]).toBe("2026-05-18");
+		expect(dates[0]).toBe("2026-05-19");
+		expect(dates[1]).toBe("2026-05-20");
+		expect(dates[2]).toBe("2026-05-21");
 	});
 	it("should reject invalid dates", () => {
 		const dates = parseDateRange("32.05-35.05");
