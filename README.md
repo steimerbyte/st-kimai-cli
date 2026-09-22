@@ -2,19 +2,36 @@
 
 A modern CLI for Kimai time-tracking. One-liner entries, pause detection, and smart defaults.
 
+> **v2.0.0 — ESM-only release.** Project now ships as native ESM (`"type": "module"`, `module: NodeNext`). Requires Node 18+. Consumers using `require()` must migrate to dynamic `import()`.
+
+---
+
 ## Installation
 
-```bash
-npm install -g st-kimai-cli
-```
-
-Or from source:
+### From source (recommended)
 
 ```bash
-git clone https://github.com/steimbyte/st-kimai-cli.git
+git clone https://github.com/steimerbyte/st-kimai-cli.git
 cd st-kimai-cli
-npm install && npm run build && npm link
+npm ci
+npm run build
+npm link            # makes `kimai-cli` available globally
 ```
+
+To uninstall the global link: `npm unlink -g st-kimai-cli`.
+
+### Download tarball
+
+Grab `st-kimai-cli-2.0.0.tgz` from the [GitHub release](https://github.com/steimerbyte/st-kimai-cli/releases/tag/v2.0.0), then:
+
+```bash
+mkdir st-kimai-cli && cd st-kimai-cli
+tar -xzf ../st-kimai-cli-2.0.0.tgz
+npm install --omit=dev
+node ./package/dist/index.js --help
+```
+
+---
 
 ## Setup
 
@@ -23,7 +40,7 @@ Create `~/.kimai-cli/auth.json`:
 ```json
 {
   "url": "https://your-kimai-server.com",
-  "apiKey": "your-api-key"
+  "apiKey": "<your-api-token>"
 }
 ```
 
@@ -31,7 +48,7 @@ Or use environment variables:
 
 ```bash
 export KIMAI_URL="https://your-kimai-server.com"
-export KIMAI_API_KEY="your-api-key"
+export KIMAI_API_KEY="<your-api-token>"
 ```
 
 ---
@@ -153,6 +170,19 @@ Most commands support:
 - `--json` - JSON output
 - `-y, --yes` - Skip confirmation
 - `-c, --config <path>` - Custom config file
+
+---
+
+## Development
+
+```bash
+npm ci                    # clean install (use this, not npm install)
+npm run build             # tsc + chmod +x
+npm run test:run          # one-shot vitest
+npm run test              # vitest watch
+```
+
+Built artifacts land in `dist/`. The build script runs `chmod +x dist/index.js` automatically, so the `bin` entry stays executable after every build.
 
 ---
 
