@@ -6,3 +6,4 @@ dist/
 auth.json
 bin/
 st-kimai-cli-*.tgz
+coverage/

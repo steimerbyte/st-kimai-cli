@@ -52,9 +52,36 @@ export async function ensureAuth(opts: EnsureAuthOptions = {}): Promise<void> {
 }
 
 /**
- * Interactive first-run wizard: prompt for URL + API key, save to ~/.kimai-cli/auth.json.
+ * Validate and normalise a Kimai URL entered by the user.
+ *
+ * - Trims whitespace.
+ * - Strips trailing slashes.
+ * - Requires the https:// scheme (HTTP would leak the API key).
+ *
+ * @param rawUrl - The raw user input.
+ * @returns The validated, normalised URL (no trailing slash).
+ * @throws Error on empty, non-https, or otherwise invalid input.
  */
-async function runWizard(): Promise<void> {
+export function validateKimaiUrl(rawUrl: string): string {
+	const url = rawUrl.trim().replace(/\/+$/, "");
+	if (!url) {
+		throw new Error("URL is required");
+	}
+	if (!/^https:\/\//i.test(url)) {
+		throw new Error(
+			`URL must use https://. Plain http would expose your API key. (got: ${url})`,
+		);
+	}
+	return url;
+}
+
+/**
+ * Interactive first-run wizard: prompt for URL + API key, save to ~/.kimai-cli/auth.json.
+ *
+ * Exported so tests can call it directly without going through ensureAuth,
+ * which avoids module-caching issues in the test environment.
+ */
+export async function runWizard(): Promise<void> {
 	const rl = createInterface({ input, output });
 
 	try {
@@ -66,17 +93,7 @@ async function runWizard(): Promise<void> {
 		const rawUrl = await rl.question(
 			"Kimai URL (e.g. https://kimai.example.com): ",
 		);
-		const url = rawUrl.trim().replace(/\/+$/, "");
-		if (!url) {
-			throw new Error("URL is required");
-		}
-		// SECURITY: HTTPS only. Plain HTTP would expose the API key on the wire.
-		// This matches the runtime check in src/api.ts.
-		if (!/^https:\/\//i.test(url)) {
-			throw new Error(
-				`URL must use https://. Plain http would expose your API key. (got: ${url})`,
-			);
-		}
+		const url = validateKimaiUrl(rawUrl);
 
 		const apiKey = (await rl.question("API key: ")).trim();
 		if (!apiKey) {

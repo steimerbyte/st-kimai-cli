@@ -417,6 +417,84 @@ describe("KimaiApi", () => {
 		});
 	});
 
+		describe("redirect handling", () => {
+			it("should throw KimaiApiError on 302 redirect and include redirect in message", async () => {
+				mockFetch.mockResolvedValueOnce({
+					status: 302,
+					ok: false,
+					statusText: "Found",
+					headers: new Headers({ Location: "https://evil.example.com" }),
+					json: async () => ({ message: "redirected" }),
+				} as unknown as Response);
+
+				try {
+					await api.ping();
+					throw new Error("Should have thrown KimaiApiError on 302");
+				} catch (error) {
+					expect(error).toBeInstanceOf(KimaiApiError);
+					expect((error as KimaiApiError).statusCode).toBe(302);
+					expect((error as KimaiApiError).message).toMatch(/redirect/i);
+				}
+			});
+
+			it("should throw KimaiApiError on 301 permanent redirect", async () => {
+				mockFetch.mockResolvedValueOnce({
+					status: 301,
+					ok: false,
+					statusText: "Moved Permanently",
+					headers: new Headers({ Location: "https://kimai.example.com/" }),
+					json: async () => ({ message: "moved" }),
+				} as unknown as Response);
+
+				try {
+					await api.ping();
+					throw new Error("Should have thrown KimaiApiError on 301");
+				} catch (error) {
+					expect(error).toBeInstanceOf(KimaiApiError);
+					expect((error as KimaiApiError).statusCode).toBe(301);
+					expect((error as KimaiApiError).message).toMatch(/redirect/i);
+				}
+			});
+
+			it("should pass redirect: manual to fetch to prevent credential leakage", async () => {
+				// A successful 200 that also carries redirect: manual proves the option
+				// is always set regardless of the response status.
+				mockFetch.mockResolvedValueOnce({
+					status: 200,
+					ok: true,
+					statusText: "OK",
+					headers: new Headers(),
+					json: async () => ({ message: "pong" }),
+				} as unknown as Response);
+
+				await api.ping();
+
+				expect(mockFetch).toHaveBeenCalledWith(
+					expect.stringContaining("/ping"),
+					expect.objectContaining({
+						redirect: "manual",
+					}),
+				);
+			});
+
+			it("should forward Authorization: Bearer header with every request", async () => {
+				mockFetch.mockResolvedValueOnce({
+					status: 200,
+					ok: true,
+					headers: new Headers(),
+					json: async () => ({ message: "pong" }),
+				} as unknown as Response);
+
+				await api.ping();
+
+				const call = mockFetch.mock.calls[0];
+				const init = call[1] as RequestInit;
+				expect(init.headers).toMatchObject({
+					Authorization: "Bearer test-key-123",
+				});
+			});
+		});
+
 	describe("KimaiApiError", () => {
 		it("should have correct name", () => {
 			const error = new KimaiApiError(404, "Not found");

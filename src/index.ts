@@ -80,16 +80,16 @@ function showQuickHelp(errorMsg?: string): void {
 📖 Quick Reference (One-Liner):
 `);
 	console.error(
-		`  kimai-cli -p 5 -a 8 -n "Task" -t 09:00-12:00  Log entry (preferred)`,
+		`  kimai-cli --project 5 --activity 8 -n "Task" -t 09:00-12:00  Log entry (preferred)`,
 	);
 	console.error(
-		`  kimai-cli -p 5 -a 8 -n "Quick"              Log now with note`,
+		`  kimai-cli --project 5 --activity 8 -n "Quick"              Log now with note`,
 	);
 	console.error(`  kimai-cli today | week | month                View entries`);
 	console.error(
 		`  kimai-cli projects | activities               Find project/activity IDs`,
 	);
-	console.error(`  kimai-cli edit <id> -n "Updated"          Edit entry note`);
+	console.error(`  kimai-cli edit <id> -N "Updated"          Edit entry note`);
 	console.error(`  kimai-cli --help                             Full help\n`);
 }
 
@@ -176,11 +176,13 @@ program
 Kimai CLI - One-liner time tracking
 
 PREFERRED WAY TO LOG TIME:
-  kimai-cli -p 5 -a 8 -n "Task" -t 09:00-12:00
+  kimai-cli --project 5 --activity 8 -n "Task" -t 09:00-12:00
 
 Required:
   -p <id>    Project ID      (use 'kimai-cli projects' to find)
+      --project <id>    Project ID (long form)
   -a <id>    Activity ID     (use 'kimai-cli activities' to find)
+      --activity <id>   Activity ID (long form)
 
 Optional:
   -n <text>  Note/description
@@ -191,9 +193,9 @@ Optional:
   -g <tags>  Tags
 
 Quick Examples:
-  kimai-cli -p 5 -a 8 -n "Coding"           Log now with note
-  kimai-cli -p 5 -a 8 -n "Meeting" -t 09:00-10:30  With time
-  kimai-cli -p 5 -a 8 -n "Work" -d 22.05 -t 09:00+4h  Specific day
+  kimai-cli --project 5 --activity 8 -n "Coding"           Log now with note
+  kimai-cli --project 5 --activity 8 -n "Meeting" -t 09:00-10:30  With time
+  kimai-cli --project 5 --activity 8 -n "Work" -d 22.05 -t 09:00+4h  Specific day
 
 Other Commands:
   kimai-cli today|week|month              View entries
@@ -204,13 +206,13 @@ Other Commands:
 	.option("-c, --config <path>", "Path to auth.json config file")
 	.option("--no-setup", "Skip the first-run setup wizard")
 	.option(
-		"-p, --project <id>",
-		"Project ID (use with -a to create entry)",
+		"    --project <id>",
+		"Project ID (use with --activity to create entry)",
 		(v) => parseInt(v, 10),
 	)
 	.option(
-		"-a, --activity <id>",
-		"Activity ID (use with -p to create entry)",
+		"    --activity <id>",
+		"Activity ID (use with --project to create entry)",
 		(v) => parseInt(v, 10),
 	)
 	.option("-n, --note <text>", "Note/description")
@@ -272,7 +274,7 @@ program
 	.description(
 		"List timesheets with optional filters (project, activity, date range)",
 	)
-	.option("-p, --project <id>", "Filter by project ID", (v) => parseInt(v, 10))
+	.option("    --project <id>", "Filter by project ID", (v) => parseInt(v, 10))
 	.option("-a, --activity <id>", "Filter by activity ID", (v) =>
 		parseInt(v, 10),
 	)
@@ -434,10 +436,34 @@ program
 	.option("-b, --begin <time>", "Start time (HH:MM format)")
 	.option("-e, --end <time>", "End time (HH:MM format)")
 	.option("-g, --tags <tags>", "Comma-separated tags")
+	.option("-y, --yes", "Skip confirmation")
 	.action(async (options) => {
 		const loading = createLoading();
+		let rl: Awaited<ReturnType<typeof import("readline").createInterface>> | null = null;
 		try {
 			const api = createApi();
+
+			// Confirmation prompt
+			if (!options.yes) {
+				const readline = await import("readline");
+				rl = readline.createInterface({
+					input: process.stdin,
+					output: process.stdout,
+				});
+				const summary = options.note ? ` - "${options.note}"` : "";
+				const answer = await new Promise<string>((resolve) => {
+					rl!.question(
+						`Create timesheet (project #${options.project}, activity #${options.activity}${summary})? [y/N] `,
+						resolve,
+					);
+				});
+				rl.close();
+				rl = null;
+				if (answer.toLowerCase() !== "y") {
+					console.log("Cancelled.");
+					return;
+				}
+			}
 
 			// Parse date (default: today)
 			const today = new Date().toISOString().split("T")[0];
@@ -486,27 +512,6 @@ program
 				}),
 			);
 
-			console.log(styledSuccess(`Timesheet #${timesheet.id} created`));
-			console.log(
-				styledRow("Project:", getProjectName(timesheet.project), styles.cyan),
-			);
-			console.log(
-				styledRow(
-					"Activity:",
-					getActivityName(timesheet.activity),
-					styles.magenta,
-				),
-			);
-			if (timesheet.description) {
-				console.log(styledRow("Note:", timesheet.description));
-			}
-			console.log(
-				styledRow(
-					"Time:",
-					`${formatTime(timesheet.begin)} - ${formatTime(timesheet.end)}`,
-				),
-			);
-			console.log(styledRow("Duration:", colorizeDuration(timesheet.duration)));
 
 			// Check for gaps in the day
 			const dayDate = getDatePart(timesheet.begin);
@@ -525,8 +530,17 @@ program
 				}
 			}
 		} catch (error) {
+			if (rl) {
+				rl.close();
+				rl = null;
+			}
 			loading.fail("Failed to create timesheet");
 			handleError(error);
+		} finally {
+			if (rl) {
+				rl.close();
+				rl = null;
+			}
 		}
 	});
 
@@ -670,10 +684,10 @@ program
 program
 	.command("edit <id>")
 	.description("Edit a timesheet: note, time, project, activity")
-	.option("-n, --note <text>", "Note/description")
+	.option("-N, --description <text>", "Note/description")
 	.option("-p, --project <id>", "New project ID", (v) => parseInt(v, 10))
 	.option("-a, --activity <id>", "New activity ID", (v) => parseInt(v, 10))
-	.option("-m, --time <range>", "Time range (09:00-12:00)")
+	.option("-T, --time <range>", "Time range (09:00-12:00)")
 	.option("-b, --begin <datetime>", "New start time (HH:MM)")
 	.option("-e, --end <datetime>", "New end time (HH:MM)")
 	.action(async (id: string, options) => {
@@ -698,11 +712,11 @@ program
 
 			// Build update object
 			const updates: Record<string, unknown> = {};
-			if (options.note !== undefined) updates.description = options.note;
+			if (options.description !== undefined) updates.description = options.description;
 			if (options.project !== undefined) updates.project = options.project;
 			if (options.activity !== undefined) updates.activity = options.activity;
 
-			// Parse time range (-t flag)
+			// Parse time range (-T flag)
 			if (options.time) {
 				if (options.time.includes("-")) {
 					const [beginStr, endStr] = options.time.split("-");
@@ -731,8 +745,8 @@ program
 			}
 
 			if (Object.keys(updates).length === 0) {
-				console.log("No updates specified. Use: -n, -m, -b, -e, -p, -a");
-				console.log("\nExample: kimai-cli edit 123 -m 09:00-12:00 -n 'Updated note'");
+				console.log("No updates specified. Use: -N, -T, -b, -e, -p, -a");
+				console.log("\nExample: kimai-cli edit 123 -T 09:00-12:00 -N 'Updated note'");
 				return;
 			}
 
@@ -840,7 +854,8 @@ program
 program
 	.command("activities")
 	.alias("acts")
-	.description("List all activities")
+	.description("List activities, optionally filtered by project")
+	.option("-P, --project <id>", "Show only activities valid for this project", (v) => parseInt(v, 10))
 	.option("--visible", "Show only visible activities")
 	.option("--billable", "Show only billable activities")
 	.option("--full", "Include full details")
@@ -849,9 +864,20 @@ program
 		const loading = createLoading();
 		try {
 			const api = createApi();
+			// Always fetch full details so we can inspect the project field
 			let activities = await withLoading("Fetching activities...", () =>
-				api.getActivities(options.full),
+				api.getActivities(true),
 			);
+
+			// Filter by project: show global activities (project === null)
+			// and activities explicitly assigned to the requested project
+			if (isValidId(options.project)) {
+				activities = activities.filter((a) => {
+					if (a.project === null) return true; // global activity
+					if (typeof a.project === "number") return a.project === options.project;
+					return a.project.id === options.project;
+				});
+			}
 
 			if (options.visible) {
 				activities = activities.filter((a) => a.visible);
@@ -864,7 +890,10 @@ program
 				console.log(JSON.stringify(activities, null, 2));
 			} else {
 				printActivities(activities);
-				console.log(`\nTotal: ${activities.length} activities`);
+				const suffix = isValidId(options.project)
+					? ` for project #${options.project}`
+					: "";
+				console.log(`\nTotal: ${activities.length} activities${suffix}`);
 			}
 		} catch (error) {
 			loading.fail("Failed to fetch activities");
@@ -1961,4 +1990,7 @@ program.action((_options, command) => {
 	}
 });
 
-program.parse();
+if (!process.env.KIMAI_SKIP_PARSE) {
+	program.parse();
+}
+export { program };

@@ -2,7 +2,11 @@
 
 A modern CLI for Kimai time-tracking. One-liner entries, pause detection, and smart defaults.
 
+[![Coverage](https://img.shields.io/badge/coverage-87%25-yellowgreen)](#testing)
+
 > **v2.0.0 — ESM-only release.** Project now ships as native ESM (`"type": "module"`, `module: NodeNext`). Requires Node 18+. Consumers using `require()` must migrate to dynamic `import()`.
+>
+> **v2.0.2 — Test coverage release.** Adds comprehensive test suite for `loading.ts`, `design-system.ts`, and previously untested paths in `utils.ts`, `api.ts`, and `setup.ts`. Configures `npm run coverage` with v8 + thresholds.
 
 ---
 
@@ -202,6 +206,47 @@ npm run test              # vitest watch
 ```
 
 Built artifacts land in `dist/`. The build script runs `chmod +x dist/index.js` automatically, so the `bin` entry stays executable after every build.
+
+---
+
+## Testing
+
+Run the test suite with [Vitest](https://vitest.dev):
+
+| Command | Description |
+|---|---|
+| `npm run test` | Vitest in watch mode (re-runs on file changes) |
+| `npm run test:run` | One-shot Vitest run (CI-friendly) |
+| `npm run coverage` | Run tests with v8 coverage enabled |
+| `npm run coverage:html` | Generate an HTML coverage report under `coverage/` |
+
+### Coverage thresholds
+
+The project enforces minimum coverage thresholds that will fail the build:
+
+| Metric | Threshold |
+|---|---|
+| Lines | 70% |
+| Statements | 70% |
+| Functions | 70% |
+| Branches | 60% |
+
+### Current coverage
+
+Coverage (from the 5 passing test suites) is currently at **87% lines / 86% statements / 80% functions / 79% branches**. The project tracks growth toward full coverage.
+
+### Test files
+
+- `src/api.test.ts` — API client tests
+- `src/config.test.ts` — Configuration loading and validation tests
+- `src/setup.test.ts` — First-run wizard tests
+- `src/utils.test.ts` — Utility function tests
+- `src/loading.test.ts` — Spinner and loading-state tests (added in v2.0.2)
+- `src/design-system.test.ts` — Design-system (colors, icons, pad, truncate, etc.) tests (added in v2.0.2)
+
+### CI
+
+GitHub Actions runs the same suite on every push — see [`.github/workflows/test.yml`](.github/workflows/test.yml).
 
 ---
 
