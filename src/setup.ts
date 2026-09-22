@@ -48,7 +48,7 @@ export async function ensureAuth(opts: EnsureAuthOptions = {}): Promise<void> {
 		);
 	}
 
-	await runWizard();
+	await loginWizard();
 }
 
 /**
@@ -81,7 +81,7 @@ export function validateKimaiUrl(rawUrl: string): string {
  * Exported so tests can call it directly without going through ensureAuth,
  * which avoids module-caching issues in the test environment.
  */
-export async function runWizard(): Promise<void> {
+export async function loginWizard(): Promise<void> {
 	const rl = createInterface({ input, output });
 
 	try {
@@ -127,6 +127,11 @@ export async function runWizard(): Promise<void> {
 		rl.close();
 	}
 }
+
+/**
+ * @deprecated Use loginWizard instead.
+ */
+export const runWizard = loginWizard;
 
 function expandHome(p: string): string {
 	const home = homedir();

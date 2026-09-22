@@ -7,3 +7,7 @@ auth.json
 bin/
 st-kimai-cli-*.tgz
 coverage/
+
+# Pix Agent
+.pi/
+.pi-lens/

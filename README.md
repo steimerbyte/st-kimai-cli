@@ -4,9 +4,7 @@ A modern CLI for Kimai time-tracking. One-liner entries, pause detection, and sm
 
 [![Coverage](https://img.shields.io/badge/coverage-87%25-yellowgreen)](#testing)
 
-> **v2.0.0 — ESM-only release.** Project now ships as native ESM (`"type": "module"`, `module: NodeNext`). Requires Node 18+. Consumers using `require()` must migrate to dynamic `import()`.
->
-> **v2.0.2 — Test coverage release.** Adds comprehensive test suite for `loading.ts`, `design-system.ts`, and previously untested paths in `utils.ts`, `api.ts`, and `setup.ts`. Configures `npm run coverage` with v8 + thresholds.
+> **v3.0.0 — BREAKING CLI redesign.** All commands redesigned for consistency. 17 commands removed, 21 single-shot commands remain. See [MIGRATION.md](./MIGRATION.md) for the upgrade guide.
 
 ---
 
@@ -39,11 +37,22 @@ node ./package/dist/index.js --help
 
 ## Setup
 
-### First-run wizard
+### Authentication
 
-If no `auth.json` exists and no `KIMAI_API_KEY` env var is set, the CLI will prompt for your Kimai URL and API key on first use, then save them to `~/.kimai-cli/auth.json` (mode `0600`). On non-interactive runs (CI, scripts) the wizard is skipped automatically.
+The CLI requires credentials (Kimai URL + API key). Configure them interactively:
 
-URLs must use `https://` (plain `http://` is rejected to avoid leaking the API key on the wire). Pass `--no-setup` to bypass the wizard in any environment.
+```bash
+kimai-cli auth login   # interactive TTY prompt; saves to ~/.kimai-cli/auth.json
+```
+
+For CI or scripted environments, use environment variables instead:
+
+```bash
+export KIMAI_URL="https://your-kimai-server.com"
+export KIMAI_API_KEY="your-api-key"
+```
+
+URLs must use `https://` (plain `http://` is rejected to avoid leaking the API key on the wire).
 
 ### Manual setup
 
@@ -76,22 +85,20 @@ The CLI applies several hardening defaults. If you hit any of them in legacy set
 
 ---
 
-## Quick Start (One-Liner Entry)
+## Quick Start
 
-The fastest way to log time:
+The `add` command is the primary way to log time:
 
 ```bash
-# Basic - project + activity + note
-kimai-cli -p 5 -a 8 -n "Projektarbeit"
+# Basic - project + activity + note + time range
+kimai-cli add -p 5 -a 8 -n "Projektarbeit" -t 09:00-17:00
 
-# With time range
-kimai-cli -p 5 -a 8 -n "Meeting" -t 09:00-10:30
+# With specific date
+kimai-cli add -p 5 -a 8 -n "Meeting" -t 09:00-10:30 -d 22.05.2026
 
-# With date
-kimai-cli -p 5 -a 8 -n "Coding" -d 22.05.2026 -t 09:00-12:00
-
-# Duration shortcut (+ means hours from start)
-kimai-cli -p 5 -a 8 -n "Working" -d 22.05 -t 09:00+3h
+# Start a running timer
+kimai-cli start -p 5 -a 8 -n "Working"
+kimai-cli stop
 ```
 
 ### Options
@@ -100,12 +107,9 @@ kimai-cli -p 5 -a 8 -n "Working" -d 22.05 -t 09:00+3h
 |------|-------------|---------|
 | `-p <id>` | Project ID | `-p 5` |
 | `-a <id>` | Activity ID | `-a 8` |
-| `-n <text>` | Note/description | `-n "Meeting"` |
-| `-d <date>` | Date (YYYY-MM-DD or DD.MM.YYYY) | `-d 22.05` |
-| `-t <range>` | Time range | `-t 09:00-12:00` |
-| `-b <HH:MM>` | Start time | `-b 09:00` |
-| `-e <HH:MM>` | End time | `-e 17:00` |
-| `-g <tags>` | Tags | `-g meeting,client` |
+| `-n <text>` | Description / note | `-n "Meeting"` |
+| `-d <date>` | Date DD.MM.YYYY | `-d 22.05` |
+| `-t <range>` | Time range HH:MM-HH:MM | `-t 09:00-17:00` |
 
 ---
 
@@ -135,28 +139,22 @@ kimai-cli edit 123 -t 10:00-12:00
 kimai-cli edit 123 -a 4
 ```
 
-### Copy Entry
+### Duplicate Entry
 
 ```bash
-kimai-cli copy 123 1        # Copy to tomorrow
-kimai-cli copy 123 1 5       # Copy next 5 days
+kimai-cli duplicate 123              # Copy to next day
+kimai-cli duplicate 123 -d 22.05.2026  # Copy to specific date
 ```
 
 ### View Entries
 
 ```bash
-kimai-cli today           # Today's entries
-kimai-cli week            # This week
-kimai-cli month           # Current month
-kimai-cli day             # Day view with gap detection
-kimai-cli list -p 5       # Filter by project
-```
-
-### Search
-
-```bash
-kimai-cli search "meeting"
-kimai-cli tagged important
+kimai-cli list --today           # Today's entries
+kimai-cli list --week            # This week
+kimai-cli list --month           # Current month
+kimai-cli list --from 01.05 --to 31.05  # Date range
+kimai-cli list --project 5      # Filter by project
+kimai-cli list --query "meeting" # Search descriptions
 ```
 
 ---
@@ -165,34 +163,35 @@ kimai-cli tagged important
 
 - **Pause Detection**: Warns when no lunch break detected
 - **Gap Detection**: Shows missing time between entries
-- **Date Formats**: ISO, DD.MM.YYYY, relative (today, yesterday)
-- **Duration Shortcuts**: `09:00+2h` = 2 hours from 09:00
+- **Date Formats**: ISO, DD.MM.YYYY (today is the default on `add`)
 
 ---
 
 ## All Commands
 
 ```bash
-kimai-cli status              # API connection check
-kimai-cli projects            # List projects
-kimai-cli activities          # List activities
-kimai-cli customers           # List customers
-kimai-cli tags                # List tags
-kimai-cli current             # Running timers
-kimai-cli timer               # Interactive timer mode
-kimai-cli range               # Batch add for date range
-kimai-cli summary             # Totals by project/activity
+kimai-cli add -p <id> -a <id> -n <text> -t HH:MM-HH:MM [-d DD.MM.YYYY]  # Log completed time
+kimai-cli edit <id>          # Edit description, time, project, activity
+kimai-cli remove <id>        # Delete a timesheet
+kimai-cli show <id>          # Show timesheet details
+kimai-cli start -p <id> -a <id> [-n <text>]  # Start a running timer
+kimai-cli stop               # Stop running timer(s)
+kimai-cli list               # List timesheets (--today|--week|--month|--from|--to)
+kimai-cli duplicate <id>     # Duplicate to next day or specific date
+kimai-cli projects           # List all projects
+kimai-cli project <id>       # Show project details
+kimai-cli activities         # List activities
+kimai-cli activity <id>      # Show activity details
+kimai-cli customers          # List customers
+kimai-cli tags               # List tags
+kimai-cli suggest            # Quick reference: projects + activities
+kimai-cli whoami             # Show authenticated user
+kimai-cli config             # Show current auth config
+kimai-cli auth login         # Configure credentials (interactive)
+kimai-cli auth logout        # Remove stored credentials
+kimai-cli help [cmd]         # Show help
+kimai-cli version            # Show version
 ```
-
----
-
-## Options
-
-Most commands support:
-
-- `--json` - JSON output
-- `-y, --yes` - Skip confirmation
-- `-c, --config <path>` - Custom config file
 
 ---
 
