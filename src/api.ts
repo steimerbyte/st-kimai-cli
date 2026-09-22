@@ -93,6 +93,10 @@ export class KimaiApi {
 		try {
 			response = await fetch(url, {
 				...options,
+				// SECURITY: refuse to follow redirects. A redirect to a different
+				// host would leak the Bearer token. Kimai APIs do not normally
+				// redirect; if you encounter a 3xx, report upstream.
+				redirect: "manual",
 				headers: {
 					...this.headers,
 					...options.headers,
@@ -101,6 +105,15 @@ export class KimaiApi {
 			});
 		} finally {
 			clearTimeout(timeoutId);
+		}
+
+		// Treat any 3xx as an error so callers know the upstream behaved
+		// unexpectedly instead of silently following it.
+		if (response.status >= 300 && response.status < 400) {
+			throw new KimaiApiError(
+				response.status,
+				`Unexpected redirect from ${url}. The CLI refuses to follow redirects to avoid leaking credentials.`,
+			);
 		}
 
 		if (!response.ok) {

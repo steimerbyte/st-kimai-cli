@@ -164,82 +164,80 @@ describe("config", () => {
 	});
 
 	describe("permission warning", () => {
-		it("should warn on world-readable config file", () => {
+		it("should throw on world-readable config file (strict by default)", () => {
 			vi.mocked(fs.existsSync).mockReturnValue(true);
 			vi.mocked(fs.readFileSync).mockReturnValue(
 				'{"url": "https://example.com", "apiKey": "key"}',
 			);
-			vi.mocked(fs.statSync).mockReturnValue({
-				mode: 0o644, // rw-r--r--
+			vi.mocked(fs.lstatSync).mockReturnValue({
+				mode: 0o100644, // rw-r--r-- with regular-file bit set
 				isFile: () => true,
 			} as unknown as fs.Stats);
 
-			// Capture console.error output
-			const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
-
-			loadAuthConfig();
-
-			expect(consoleSpy).toHaveBeenCalledWith(
-				expect.stringContaining("Warning"),
-			);
-			expect(consoleSpy).toHaveBeenCalledWith(
-				expect.stringContaining("permissions"),
-			);
-
-			consoleSpy.mockRestore();
-		});
-
-		it("should warn on group-readable config file", () => {
-			vi.mocked(fs.existsSync).mockReturnValue(true);
-			vi.mocked(fs.readFileSync).mockReturnValue(
-				'{"url": "https://example.com", "apiKey": "key"}',
-			);
-			vi.mocked(fs.statSync).mockReturnValue({
-				mode: 0o664, // rw-rw-r--
-				isFile: () => true,
-			} as unknown as fs.Stats);
-
-			const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
-
-			loadAuthConfig();
-
-			expect(consoleSpy).toHaveBeenCalledWith(
-				expect.stringContaining("Warning"),
-			);
-
-			consoleSpy.mockRestore();
-		});
-
-		it("should error in strict mode on insecure permissions", () => {
-			process.env.KIMAI_STRICT_PERMS = "1";
-			vi.mocked(fs.existsSync).mockReturnValue(true);
-			vi.mocked(fs.readFileSync).mockReturnValue(
-				'{"url": "https://example.com", "apiKey": "key"}',
-			);
-			vi.mocked(fs.statSync).mockReturnValue({
-				mode: 0o644,
-				isFile: () => true,
-			} as unknown as fs.Stats);
-
-			expect(() => loadAuthConfig()).toThrow(/SECURITY/);
-			expect(() => loadAuthConfig()).toThrow(/insecure permissions/);
+			expect(() => loadAuthConfig()).toThrow(/SECURITY.*insecure permissions/);
 			expect(() => loadAuthConfig()).toThrow(/chmod 600/);
 		});
 
-		it("should not warn on secure permissions (600)", () => {
+		it("should throw on group-readable config file (strict by default)", () => {
 			vi.mocked(fs.existsSync).mockReturnValue(true);
 			vi.mocked(fs.readFileSync).mockReturnValue(
 				'{"url": "https://example.com", "apiKey": "key"}',
 			);
-			vi.mocked(fs.statSync).mockReturnValue({
-				mode: 0o600, // rw-------
+			vi.mocked(fs.lstatSync).mockReturnValue({
+				mode: 0o100664, // rw-rw-r--
 				isFile: () => true,
 			} as unknown as fs.Stats);
 
-			const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+			expect(() => loadAuthConfig()).toThrow(/SECURITY.*insecure permissions/);
+		});
 
-			loadAuthConfig();
+		it("should accept insecure permissions when KIMAI_RELAX_PERMS=1", () => {
+			process.env.KIMAI_RELAX_PERMS = "1";
+			vi.mocked(fs.existsSync).mockReturnValue(true);
+			vi.mocked(fs.readFileSync).mockReturnValue(
+				'{"url": "https://example.com", "apiKey": "key"}',
+			);
+			vi.mocked(fs.lstatSync).mockReturnValue({
+				mode: 0o100644,
+				isFile: () => true,
+			} as unknown as fs.Stats);
 
+			const consoleSpy = vi
+				.spyOn(console, "error")
+				.mockImplementation(() => {});
+			expect(() => loadAuthConfig()).not.toThrow();
+			expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining("Warning"));
+			consoleSpy.mockRestore();
+			delete process.env.KIMAI_RELAX_PERMS;
+		});
+
+		it("should refuse a symlinked config file", () => {
+			vi.mocked(fs.existsSync).mockReturnValue(true);
+			vi.mocked(fs.lstatSync).mockReturnValue({
+				mode: 0o120000, // S_IFLNK — symlink
+				isFile: () => false,
+			} as unknown as fs.Stats);
+
+			expect(() => loadAuthConfig()).toThrow(/symlink/);
+		});
+
+		it("should accept secure permissions (600)", () => {
+			vi.mocked(fs.existsSync).mockReturnValue(true);
+			vi.mocked(fs.readFileSync).mockReturnValue(
+				'{"url": "https://example.com", "apiKey": "key"}',
+			);
+			vi.mocked(fs.lstatSync).mockReturnValue({
+				mode: 0o100600, // regular file, rw-------
+				isFile: () => true,
+			} as unknown as fs.Stats);
+
+			const consoleSpy = vi
+				.spyOn(console, "error")
+				.mockImplementation(() => {});
+
+			const config = loadAuthConfig();
+
+			expect(config.apiKey).toBe("key");
 			expect(consoleSpy).not.toHaveBeenCalled();
 
 			consoleSpy.mockRestore();
@@ -263,22 +261,20 @@ describe("config", () => {
 	});
 
 	describe("config file precedence", () => {
-		it("should prefer local auth.json over home directory", () => {
-			vi.mocked(fs.existsSync).mockImplementation((p) => {
-				const pathStr = typeof p === "string" ? p : String(p);
-				return pathStr.includes("workspace") || pathStr.includes(".kimai-cli");
-			});
+		it("should resolve the home config path via os.homedir()", () => {
+			vi.mocked(fs.existsSync).mockReturnValue(true);
 			vi.mocked(fs.readFileSync).mockReturnValue(
-				'{"url": "https://local.example.com", "apiKey": "local-key"}',
+				'{"url": "https://home.example.com", "apiKey": "home-key"}',
 			);
-			vi.mocked(fs.statSync).mockReturnValue({
-				mode: 0o600,
+			vi.mocked(fs.lstatSync).mockReturnValue({
+				mode: 0o100600,
 				isFile: () => true,
 			} as unknown as fs.Stats);
 
 			const config = loadAuthConfig();
 
-			expect(config.url).toContain("local");
+			expect(config.url).toBe("https://home.example.com");
+			expect(config.apiKey).toBe("home-key");
 		});
 	});
 });

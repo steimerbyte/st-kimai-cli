@@ -53,4 +53,15 @@ describe("ensureAuth", () => {
 		await expect(ensureAuth()).resolves.toBeUndefined();
 		expect(existsSync(join(tmpHome, ".kimai-cli", "auth.json"))).toBe(false);
 	});
+
+	it("falls back to os.homedir() when HOME env is empty (no silent cwd path)", async () => {
+		// Regression: previously `process.env.HOME || ""` collapsed an empty HOME
+		// to a cwd-relative path. The wizard must use os.homedir() instead so
+		// credentials never end up in an unexpected directory.
+		process.env.HOME = "";
+		const { ensureAuth } = await import("./setup.js");
+		await expect(ensureAuth()).rejects.toThrow(/No auth\.json found/);
+		// Crucially: it should NOT resolve to a cwd-relative path.
+		expect(existsSync(".kimai-cli/auth.json")).toBe(false);
+	});
 });

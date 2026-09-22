@@ -1,5 +1,6 @@
 import * as fs from "fs";
 import * as path from "path";
+import { homedir } from "os";
 import type { AuthConfig } from "./types.js";
 
 /**
@@ -20,10 +21,14 @@ function isAuthConfig(value: unknown): value is AuthConfig {
 	return typeof obj.url === "string" && typeof obj.apiKey === "string";
 }
 
-const CONFIG_FILES = [
-	"./auth.json",
-	path.join(process.env.HOME || "", ".kimai-cli", "auth.json"),
-];
+const HOME_DIR = homedir();
+if (!HOME_DIR) {
+	throw new Error(
+		"Cannot determine user home directory. Set $HOME (Linux/macOS) or $USERPROFILE (Windows).",
+	);
+}
+
+const CONFIG_FILES = [path.join(HOME_DIR, ".kimai-cli", "auth.json")];
 
 export function loadAuthConfig(configFile?: string): AuthConfig {
 	const configPaths = configFile ? [path.resolve(configFile)] : CONFIG_FILES;
@@ -62,27 +67,35 @@ export function loadAuthConfig(configFile?: string): AuthConfig {
 
 	const configPath = foundPath;
 
-	// Check file permissions (Unix-like systems)
+	// Check file permissions and refuse symlinks (Unix-like systems)
 	try {
-		const stats = fs.statSync(configPath);
+		const stats = fs.lstatSync(configPath);
+		// 0o120000 is the S_IFLNK mask — refuse symlinked config files to
+		// prevent symlink-attack substitution in writable shared directories.
+		if ((stats.mode & 0o170000) === 0o120000) {
+			throw new Error(
+				`SECURITY: Config file is a symlink — refusing to follow. ` +
+					`Replace with a regular file: rm ${configPath}`,
+			);
+		}
 		const mode = stats.mode & 0o777;
 		if (mode & 0o077) {
 			const permStr = mode.toString(8);
-			// Strict mode: exit with error for insecure permissions
-			if (process.env.KIMAI_STRICT_PERMS === "1") {
+			// Strict-by-default: refuse to read a world-readable config.
+			// Opt out with KIMAI_RELAX_PERMS=1 for legacy deployments.
+			if (process.env.KIMAI_RELAX_PERMS !== "1") {
 				throw new Error(
 					`SECURITY: Config file has insecure permissions (${permStr}). ` +
-						`API key may be readable by others. Run: chmod 600 ${configPath}`,
+						`API key may be readable by others. Run: chmod 600 ${configPath} ` +
+						`(or set KIMAI_RELAX_PERMS=1 to override).`,
 				);
 			}
 			console.error(
-				`⚠️  Warning: Config file has permissive permissions (${permStr}). ` +
-					`Consider running: chmod 600 ${configPath}`,
+				`⚠️  Warning: Config file has permissive permissions (${permStr}).`,
 			);
 		}
 	} catch (error) {
-		// Re-throw security errors
-		if (error instanceof Error && error.message.includes("SECURITY")) {
+		if (error instanceof Error && error.message.startsWith("SECURITY")) {
 			throw error;
 		}
 		// Ignore - file might not exist (already handled above)

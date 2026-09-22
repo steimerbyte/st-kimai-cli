@@ -2,6 +2,7 @@ import { createInterface } from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
 import { mkdir, writeFile, chmod, stat } from "node:fs/promises";
 import { join } from "node:path";
+import { homedir } from "node:os";
 import { loadAuthConfig, getConfigPath } from "./config.js";
 
 export interface EnsureAuthOptions {
@@ -69,8 +70,12 @@ async function runWizard(): Promise<void> {
 		if (!url) {
 			throw new Error("URL is required");
 		}
-		if (!/^https?:\/\//i.test(url)) {
-			throw new Error(`URL must start with http:// or https:// (got: ${url})`);
+		// SECURITY: HTTPS only. Plain HTTP would expose the API key on the wire.
+		// This matches the runtime check in src/api.ts.
+		if (!/^https:\/\//i.test(url)) {
+			throw new Error(
+				`URL must use https://. Plain http would expose your API key. (got: ${url})`,
+			);
 		}
 
 		const apiKey = (await rl.question("API key: ")).trim();
@@ -107,12 +112,9 @@ async function runWizard(): Promise<void> {
 }
 
 function expandHome(p: string): string {
-	if (p.startsWith("~/")) {
-		return join(process.env.HOME || "", p.slice(2));
-	}
-	if (p === "~") {
-		return process.env.HOME || "";
-	}
+	const home = homedir();
+	if (p === "~") return home;
+	if (p.startsWith("~/")) return join(home, p.slice(2));
 	return p;
 }
 

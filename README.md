@@ -39,7 +39,7 @@ node ./package/dist/index.js --help
 
 If no `auth.json` exists and no `KIMAI_API_KEY` env var is set, the CLI will prompt for your Kimai URL and API key on first use, then save them to `~/.kimai-cli/auth.json` (mode `0600`). On non-interactive runs (CI, scripts) the wizard is skipped automatically.
 
-Pass `--no-setup` to bypass the wizard in any environment.
+URLs must use `https://` (plain `http://` is rejected to avoid leaking the API key on the wire). Pass `--no-setup` to bypass the wizard in any environment.
 
 ### Manual setup
 
@@ -58,6 +58,17 @@ Or use environment variables:
 export KIMAI_URL="https://your-kimai-server.com"
 export KIMAI_API_KEY="<your-api-token>"
 ```
+
+### Security defaults (v2.0.1+)
+
+The CLI applies several hardening defaults. If you hit any of them in legacy setups:
+
+| Behavior | Opt-out |
+|---|---|
+| Refuses HTTP redirects (`fetch` follows none; any 3xx becomes an error) | None — contact upstream Kimai if you see 3xx |
+| Refuses to read auth.json with mode `> 0600` (other-readable bits set) | `KIMAI_RELAX_PERMS=1` |
+| Refuses to follow a symlinked auth.json | None — replace with a regular file |
+| Config path is resolved via `os.homedir()`; cwd-relative `./auth.json` is no longer auto-discovered | Pass `--config <path>` explicitly |
 
 ---
 
