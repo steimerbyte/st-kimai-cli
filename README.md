@@ -35,6 +35,14 @@ node ./package/dist/index.js --help
 
 ## Setup
 
+### First-run wizard
+
+If no `auth.json` exists and no `KIMAI_API_KEY` env var is set, the CLI will prompt for your Kimai URL and API key on first use, then save them to `~/.kimai-cli/auth.json` (mode `0600`). On non-interactive runs (CI, scripts) the wizard is skipped automatically.
+
+Pass `--no-setup` to bypass the wizard in any environment.
+
+### Manual setup
+
 Create `~/.kimai-cli/auth.json`:
 
 ```json

@@ -2,6 +2,7 @@
 
 import { Command } from "commander";
 import { loadAuthConfig } from "./config.js";
+import { ensureAuth } from "./setup.js";
 import { KimaiApi, KimaiApiError } from "./api.js";
 import {
 	printTimesheets,
@@ -93,6 +94,18 @@ function showQuickHelp(errorMsg?: string): void {
 }
 
 // Exit override to show help on errors
+program.hook("preAction", async (_thisCommand, actionCommand) => {
+	const opts = actionCommand.optsWithGlobals() as { setup?: boolean };
+	if (opts.setup !== false) {
+		try {
+			await ensureAuth();
+		} catch (err) {
+			console.error(err instanceof Error ? err.message : String(err));
+			process.exit(1);
+		}
+	}
+});
+
 program.exitOverride((err) => {
 	if (err) {
 		if (err.code === "commander.missingArgument") {
@@ -189,6 +202,7 @@ Other Commands:
   kimai-cli projects|activities          List IDs
 `)
 	.option("-c, --config <path>", "Path to auth.json config file")
+	.option("--no-setup", "Skip the first-run setup wizard")
 	.option(
 		"-p, --project <id>",
 		"Project ID (use with -a to create entry)",

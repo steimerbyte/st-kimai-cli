@@ -5,3 +5,4 @@ dist/
 .env
 auth.json
 bin/
+st-kimai-cli-*.tgz
